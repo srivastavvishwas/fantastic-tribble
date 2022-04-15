@@ -1,0 +1,49 @@
+-- function to manaage the state to state transion 
+
+create or replace 
+ function uagg_m2m (cagg bigint[], cval int)
+   returns bigint[]
+  language plpgsql
+    strict
+as $$
+-- SFUNC for min_to_max AGGREGATE
+declare nagg bigint[]; 
+begin
+	nagg[1] = least(cval::bigint, cagg[1]);
+	nagg[2] = greatest(cval::bigint, cagg[2]);
+    return nagg; 
+end;
+$$; 
+
+
+-- function to manaage the final output
+
+create or replace 
+ function uagg_m2m_fin (cagg bigint[])
+   returns text
+  language plpgsql
+as $$
+--  FINALFUNC for min_to_max AGGREGATE 
+declare agg int[] = '{null,null}';
+begin
+	 -- if the low value is = to initialization value 
+	 -- it means that all values for a state translation were null
+	 if cagg[1] <> 2147483648 then 
+	    agg[1] = cagg[1]::int;
+	    agg[2] = cagg[2]::int;
+     end if;
+    
+     return agg[1] || ' -> ' || agg[2]; 
+end;
+$$;
+
+
+
+-- define User AGGREGATE
+create or replace  aggregate  min_to_max (p_val integer)
+    (
+      sfunc = uagg_m2m                       -- state-to-state transition function  
+    , stype = bigint[]                       -- state-to-state type aggregating array representing (min, max)
+    , finalfunc = uagg_m2m_fin               -- final result handeling function   
+    , initcond = '{2147483648, -2147483649}' -- initial state, array of (min, max) 
+    );
